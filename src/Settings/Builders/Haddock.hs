@@ -8,11 +8,11 @@ import Settings.Builders.Common
 import Settings.Builders.Ghc
 import Types.ConfiguredCabal as ConfCabal
 
+import Debug.Trace
+
 -- | Given a version string such as "2.16.2" produce an integer equivalent.
 versionToInt :: String -> Int
-versionToInt s = case map read . words $ replaceEq '.' ' ' s of
-    [major, minor, patch] -> major * 1000 + minor * 10 + patch
-    _                     -> error "versionToInt: cannot parse version."
+versionToInt = read . dropWhile (=='0') . filter (/='.')
 
 haddockBuilderArgs :: Args
 haddockBuilderArgs = withHsPackage $ \ctx -> mconcat
@@ -39,8 +39,9 @@ haddockBuilderArgs = withHsPackage $ \ctx -> mconcat
         haddocks <- expr . haddockDependencies =<< getContext
         Just hVersion <- expr $ pkgVersion ctx
         ghcOpts  <- haddockGhcArgs
-        mconcat
-            [ arg $ "--odir=" ++ takeDirectory output
+        traceShow (pkg, version, hVersion, ghcOpts) $ mconcat
+            [ arg $ "-B" ++ "_build/stage1/lib"
+            , arg $ "--odir=" ++ takeDirectory output
             , arg "--verbosity=0"
             , arg "--no-tmp-comp-dir"
             , arg $ "--dump-interface=" ++ output
@@ -50,13 +51,17 @@ haddockBuilderArgs = withHsPackage $ \ctx -> mconcat
             , arg $ "--title=" ++ pkgName pkg ++ "-" ++ version
                     ++ ": " ++ synopsis
             , arg $ "--prologue=" ++ path -/- "haddock-prologue.txt"
-            , arg $ "--optghc=-D__HADDOCK_VERSION__="
-                    ++ show (versionToInt hVersion)
+            -- , arg $ "--optghc=-D__HADDOCK_VERSION__="
+            --        ++ show (versionToInt hVersion)
+            -- !!! this usually is not the haddock version, but the package's?
             , map ("--hide=" ++) <$> getConfiguredCabalData ConfCabal.otherModules
             , pure [ "--read-interface=../" ++ dep
                      ++ ",../" ++ dep ++ "/src/%{MODULE}.html#%{NAME},"
                      ++ haddock | (dep, haddock) <- zip deps haddocks ]
-            , pure [ "--optghc=" ++ opt | opt <- ghcOpts ]
+            , pure $ [ "--optghc=" ++ opt
+                   | opt <- ghcOpts
+                   , not ("--package-db=" `isPrefixOf` opt)
+                   ]
             , getInputs
             , arg "+RTS"
             , arg $ "-t" ++ path -/- "haddock.t"

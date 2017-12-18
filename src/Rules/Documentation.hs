@@ -8,11 +8,13 @@ module Rules.Documentation (
 
 import Base
 import Context
-import Types.Flavour
+import Expression (getConfiguredCabalData, interpretInContext)
 import GHC
 import Oracles.ModuleFiles
 import Settings
 import Target
+import qualified Types.ConfiguredCabal as ConfCabal
+import Types.Flavour
 import Utilities
 
 -- | Build all documentation
@@ -29,7 +31,7 @@ documentationRules = do
         let html = htmlRoot -/- "index.html"
             archives = map pathArchive docPaths
             pdfs = map pathPdf $ docPaths \\ [ "libraries" ]
-        need $ map (root -/-) $ [html] ++ archives ++ pdfs
+        need $ map (root -/-) $ [html] -- ++ archives -- ++ pdfs
         need [ root -/- htmlRoot -/- "libraries" -/- "gen_contents_index" ]
         need [ root -/- htmlRoot -/- "libraries" -/- "prologue.txt" ]
         need [manPagePath]
@@ -108,10 +110,11 @@ buildLibraryDocumentation = do
     root <- buildRootRules
     root -/- htmlRoot -/- "libraries/index.html" %> \file -> do
         haddocks <- allHaddocks
+        putNormal ("Haddocks: " ++ show haddocks)
         need haddocks
-        let libDocs = filter (\x -> takeFileName x /= "ghc.haddock") haddocks
-            context = vanillaContext Stage2 docPackage
-        build $ target context (Haddock BuildIndex) libDocs [file]
+        need ["_build/stage1/lib/llvm-targets"]
+        let context = vanillaContext Stage2 docPackage
+        build $ target context (Haddock BuildIndex) haddocks [file]
 
 allHaddocks :: Action [FilePath]
 allHaddocks = do
@@ -120,12 +123,12 @@ allHaddocks = do
              | pkg <- pkgs, isLibrary pkg, isHsPackage pkg ]
 
 haddockHtmlLib :: FilePath
-haddockHtmlLib = "inplace/lib/html/haddock-util.js"
+haddockHtmlLib = "_build/lib/html/haddock-bundle.min.js"
 
 -- | Find the haddock files for the dependencies of the current library
 haddockDependencies :: Context -> Action [FilePath]
-haddockDependencies _context = do
-    depNames <- pure $ error "lookup DEP_NAMES via configuredCabalData" -- pkgDataList $ DepNames path
+haddockDependencies context = do
+    depNames <- interpretInContext context (getConfiguredCabalData ConfCabal.depNames)
     sequence [ pkgHaddockFile $ vanillaContext Stage1 depPkg
              | Just depPkg <- map findPackageByName depNames, depPkg /= rts ]
 
@@ -143,9 +146,21 @@ buildPackageDocumentation context@Context {..} = when (stage == Stage1) $ do
 
     -- Per-package haddocks
     root <- buildRootRules
-    root -/- pkgName package <.> "haddock" %> \file -> do
+
+    root -/- htmlRoot -/- "libraries" -/- pkgName package -/- "haddock-prologue.txt" %> \file -> do
+      -- this is how ghc-cabal produces "haddock-prologue.txt" files
+      (syn, desc) <- interpretInContext context . getConfiguredCabalData $ \p ->
+        (ConfCabal.synopsis p, ConfCabal.description p)
+      let prologue = if null desc
+                     then syn
+                     else desc
+      liftIO (writeFile file prologue)
+
+    root -/- htmlRoot -/- "libraries" -/- pkgName package -/- pkgName package <.> "haddock" %> \file -> do
+        putNormal ("Haddock file: " ++ file)
         haddocks <- haddockDependencies context
         srcs <- hsSources context
+        when (pkgName package == "ghc-prim") $ putNormal ("  srcs " ++ show srcs)
         need $ srcs ++ haddocks ++ [haddockHtmlLib]
 
         -- Build Haddock documentation

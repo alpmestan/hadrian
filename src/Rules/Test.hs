@@ -20,7 +20,8 @@ testRules = do
         -- TODO: Figure out why @needBuilder Hsc2Hs@ doesn't work.
         -- TODO: Eliminate explicit filepaths.
         -- See https://github.com/snowleopard/hadrian/issues/376.
-        need ["inplace/bin/hp2ps", "inplace/bin/hsc2hs"]
+        -- need ["inplace/bin/hp2ps", "inplace/bin/hsc2hs"]
+        need [ "_build/stage1/bin/hp2ps", "_build/stage1/bin/hsc2hs" ]
         build $ target (vanillaContext Stage2 compiler) (Make "testsuite/tests") [] []
 
     "test" ~> do
@@ -31,6 +32,7 @@ testRules = do
         windows  <- windowsHost
         top      <- topDirectory
         compiler <- builderPath $ Ghc CompileHs Stage2
+        putNormal ("GHC: " ++ compiler)
         ghcPkg   <- builderPath $ GhcPkg Update Stage1
         haddock  <- builderPath (Haddock BuildPackage)
         threads  <- shakeThreads <$> getShakeOptions
@@ -38,7 +40,7 @@ testRules = do
         ghcWithNativeCodeGenInt <- fromEnum <$> ghcWithNativeCodeGen
         ghcWithInterpreterInt   <- fromEnum <$> ghcWithInterpreter
         ghcUnregisterisedInt    <- fromEnum <$> flag GhcUnregisterised
-        quietly . cmd "python2" $
+        quietly . cmd "python3" $
             [ "testsuite/driver/runtests.py" ]
             ++ map ("--rootdir="++) tests ++
             [ "-e", "windows=" ++ show windows
@@ -53,12 +55,12 @@ testRules = do
             , "-e", "ghc_unregisterised=" ++ show ghcUnregisterisedInt
             , "-e", "ghc_with_threaded_rts=0" -- TODO: support threaded
             , "-e", "ghc_with_dynamic_rts=0" -- TODO: support dynamic
-            , "-e", "ghc_dynamic_by_default=False" -- TODO: support dynamic
+            -- , "-e", "ghc_dynamic_by_default=False" -- TODO: support dynamic
             , "-e", "ghc_dynamic=0" -- TODO: support dynamic
             , "-e", "ghc_with_llvm=0" -- TODO: support LLVM
             , "-e", "in_tree_compiler=True" -- TODO: when is it equal to False?
             , "-e", "clean_only=False" -- TODO: do we need to support True?
-            , "--configfile=testsuite/config/ghc"
+            , "--config-file=testsuite/config/ghc"
             , "--config", "compiler=" ++ show (top -/- compiler)
             , "--config", "ghc_pkg="  ++ show (top -/- ghcPkg)
             , "--config", "haddock="  ++ show (top -/- haddock)

@@ -52,6 +52,7 @@ stage0Packages = do
              , hsc2hs
              , hp2ps
              , hpc
+             , hpcBin
              , mtl
              , parsec
              , templateHaskell
@@ -80,6 +81,7 @@ stage1Packages = do
              , ghcPkg
              , ghcPrim
              , haskeline
+             , hp2ps
              , hsc2hs
              , intLib
              , pretty
