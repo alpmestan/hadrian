@@ -2,11 +2,11 @@
 # by only invoking hadrian.
 
 
-{ nixpkgs ? import <nixpkgs> {} }:
+{ nixpkgs ? import <nixpkgs> {}
+, boot-ghc ? "ghc821" }:
 
 let
-  haskellPackages = nixpkgs.haskell.packages.ghc821;
-
+  haskellPackages = nixpkgs.haskell.packages.${boot-ghc};
   removeBuild = path: type:
     let baseName = baseNameOf (toString path);
     in
@@ -20,33 +20,35 @@ let
            || nixpkgs.lib.hasSuffix ".sh" baseName
            || !(nixpkgs.lib.cleanSourceFilter path type)) ;
 
-  filterSrc = path: builtins.filterSource removeBuild path;
+  filterSrc = path: builtins.filterSource removeBuild path ;
 
-
-  hadrianPackages = nixpkgs.haskell.packages.ghc821.override {
+  hadrianPackages = haskellPackages.override {
     overrides = self: super: let
-        localPackage = name: path: self.callCabal2nix name (filterSrc path) {};
+        localPackage = name: path: self.callCabal2nix name (filterSrc path) {} ;
+	noCheck = nixpkgs.haskell.lib.dontCheck ;
       in {
         hadrian = localPackage "hadrian" ./. ;
-        shake = self.callHackage "shake" "0.16" {};
-        Cabal = localPackage "Cabal" ./../libraries/Cabal/Cabal ;
-        filepath = localPackage "filepath" ./../libraries/filepath ;
-        text = localPackage "text" ./../libraries/text  ;
-        hpc = localPackage"hpc" ./../libraries/hpc ;
-        parsec = localPackage "parsec" ./../libraries/parsec ;
-        HUnit = nixpkgs.haskell.lib.dontCheck (self.callHackage "HUnit" "1.3.1.2" {});
-        process = localPackage "process" ./../libraries/process ;
-        directory = localPackage "directory" ./../libraries/directory ;
+        shake = noCheck (self.callHackage "shake" "0.16" {}) ;
+        Cabal = noCheck (localPackage "Cabal" ./../libraries/Cabal/Cabal) ;
+        filepath = noCheck (localPackage "filepath" ./../libraries/filepath) ;
+        text = noCheck (localPackage "text" ./../libraries/text) ;
+        hpc = noCheck (localPackage "hpc" ./../libraries/hpc) ;
+        parsec = noCheck (localPackage "parsec" ./../libraries/parsec) ;
+        HUnit = noCheck (self.callHackage "HUnit" "1.3.1.2" {}) ;
+        process = noCheck (localPackage "process" ./../libraries/process) ;
+        directory = noCheck (localPackage "directory" ./../libraries/directory) ;
       }; };
 
 in
-  nixpkgs.lib.overrideDerivation nixpkgs.haskell.packages.ghcHEAD.ghc
+  nixpkgs.lib.overrideDerivation
+    (nixpkgs.haskell.compiler.ghcHEAD.override {
+      bootPkgs = haskellPackages;
+    })
     (drv: {
       name = "ghc-dev";
       buildInputs = drv.buildInputs ++ [
                     hadrianPackages.hadrian
                     nixpkgs.arcanist
-                    nixpkgs.haskell.compiler.ghc821
                     haskellPackages.alex
                     haskellPackages.happy
                     nixpkgs.python3

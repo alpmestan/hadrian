@@ -29,7 +29,7 @@ documentationRules = do
         let html = htmlRoot -/- "index.html"
             archives = map pathArchive docPaths
             pdfs = map pathPdf $ docPaths \\ [ "libraries" ]
-        need $ map (root -/-) $ [html] ++ archives ++ pdfs
+        need $ map (root -/-) $ [html] -- ++ archives ++ pdfs
         need [ root -/- htmlRoot -/- "libraries" -/- "gen_contents_index" ]
         need [ root -/- htmlRoot -/- "libraries" -/- "prologue.txt" ]
         need [manPagePath]
@@ -143,7 +143,8 @@ buildPackageDocumentation context@Context {..} = when (stage == Stage1) $ do
 
     -- Per-package haddocks
     root <- buildRootRules
-    root -/- pkgName package <.> "haddock" %> \file -> do
+    liftIO (print root)
+    root -/- htmlRoot -/- "libraries" -/- pkgName package -/- pkgName package <.> "haddock" %> \file -> do
         haddocks <- haddockDependencies context
         srcs <- hsSources context
         need $ srcs ++ haddocks ++ [haddockHtmlLib]
