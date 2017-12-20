@@ -63,4 +63,4 @@ in
 		    nixpkgs.which
                     nixpkgs.llvm_5
 		  ];
-  }
+  })
