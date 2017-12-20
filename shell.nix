@@ -62,4 +62,4 @@ in
                     nixpkgs.file
                     nixpkgs.llvm_5
 		  ];
-  }
+  })
