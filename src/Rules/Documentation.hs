@@ -8,11 +8,13 @@ module Rules.Documentation (
 
 import Base
 import Context
-import Types.Flavour
+import Expression (getConfiguredCabalData, interpretInContext)
 import GHC
 import Oracles.ModuleFiles
 import Settings
 import Target
+import qualified Types.ConfiguredCabal as ConfCabal
+import Types.Flavour
 import Utilities
 
 -- | Build all documentation
@@ -119,13 +121,13 @@ allHaddocks = do
     sequence [ pkgHaddockFile $ vanillaContext Stage1 pkg
              | pkg <- pkgs, isLibrary pkg, isHsPackage pkg ]
 
-haddockHtmlLib :: FilePath
-haddockHtmlLib = "inplace/lib/html/haddock-util.js"
+haddockHtmlLib :: FilePath -> FilePath
+haddockHtmlLib root = root -/- "lib/html/haddock-bundle.min.js"
 
 -- | Find the haddock files for the dependencies of the current library
 haddockDependencies :: Context -> Action [FilePath]
-haddockDependencies _context = do
-    depNames <- pure $ error "lookup DEP_NAMES via configuredCabalData" -- pkgDataList $ DepNames path
+haddockDependencies context = do
+    depNames <- interpretInContext context (getConfiguredCabalData ConfCabal.depNames)
     sequence [ pkgHaddockFile $ vanillaContext Stage1 depPkg
              | Just depPkg <- map findPackageByName depNames, depPkg /= rts ]
 
@@ -134,20 +136,19 @@ haddockDependencies _context = do
 -- files in the Shake database seems fragile and unnecessary.
 buildPackageDocumentation :: Context -> Rules ()
 buildPackageDocumentation context@Context {..} = when (stage == Stage1) $ do
+    root <- buildRootRules
 
     -- Js and Css files for haddock output
-    when (package == haddock) $ haddockHtmlLib %> \_ -> do
-        let dir = takeDirectory haddockHtmlLib
+    when (package == haddock) $ haddockHtmlLib root %> \_ -> do
+        let dir = takeDirectory (haddockHtmlLib root)
         liftIO $ removeFiles dir ["//*"]
         copyDirectory "utils/haddock/haddock-api/resources/html" dir
 
     -- Per-package haddocks
-    root <- buildRootRules
-    liftIO (print root)
     root -/- htmlRoot -/- "libraries" -/- pkgName package -/- pkgName package <.> "haddock" %> \file -> do
         haddocks <- haddockDependencies context
         srcs <- hsSources context
-        need $ srcs ++ haddocks ++ [haddockHtmlLib]
+        need $ srcs ++ haddocks ++ [haddockHtmlLib root]
 
         -- Build Haddock documentation
         -- TODO: pass the correct way from Rules via Context
