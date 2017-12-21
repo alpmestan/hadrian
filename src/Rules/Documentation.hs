@@ -109,6 +109,7 @@ buildLibraryDocumentation :: Rules ()
 buildLibraryDocumentation = do
     root <- buildRootRules
     root -/- htmlRoot -/- "libraries/index.html" %> \file -> do
+        need [ root -/- "stage1/lib/llvm-targets" ]
         haddocks <- allHaddocks
         need haddocks
         let libDocs = filter (\x -> takeFileName x /= "ghc.haddock") haddocks
@@ -145,7 +146,18 @@ buildPackageDocumentation context@Context {..} = when (stage == Stage1) $ do
         copyDirectory "utils/haddock/haddock-api/resources/html" dir
 
     -- Per-package haddocks
+
+    root -/- htmlRoot -/- "libraries" -/- pkgName package -/- "haddock-prologue.txt" %> \file -> do
+      -- this is how ghc-cabal produces "haddock-prologue.txt" files
+      (syn, desc) <- interpretInContext context . getConfiguredCabalData $ \p ->
+        (ConfCabal.synopsis p, ConfCabal.description p)
+      let prologue = if null desc
+                     then syn
+                     else desc
+      liftIO (writeFile file prologue)
+
     root -/- htmlRoot -/- "libraries" -/- pkgName package -/- pkgName package <.> "haddock" %> \file -> do
+        need [ root -/- htmlRoot -/- "libraries" -/- pkgName package -/- "haddock-prologue.txt" ]
         haddocks <- haddockDependencies context
         srcs <- hsSources context
         need $ srcs ++ haddocks ++ [haddockHtmlLib root]
