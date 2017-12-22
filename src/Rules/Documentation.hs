@@ -111,9 +111,12 @@ buildLibraryDocumentation = do
     root -/- htmlRoot -/- "libraries/index.html" %> \file -> do
         need [ root -/- "stage1/lib/llvm-targets" ]
         haddocks <- allHaddocks
-        need haddocks
-        let libDocs = filter (\x -> takeFileName x /= "ghc.haddock") haddocks
+        let libDocs = filter (\x -> takeFileName x `notElem` [ "ghc.haddock"
+                                                             , "rts.haddock"
+                                                             ]
+                             ) haddocks
             context = vanillaContext Stage2 docPackage
+        need libDocs
         build $ target context (Haddock BuildIndex) libDocs [file]
 
 allHaddocks :: Action [FilePath]
@@ -136,7 +139,7 @@ haddockDependencies context = do
 -- All of them go into the 'doc' subdirectory. Pedantically tracking all built
 -- files in the Shake database seems fragile and unnecessary.
 buildPackageDocumentation :: Context -> Rules ()
-buildPackageDocumentation context@Context {..} = when (stage == Stage1) $ do
+buildPackageDocumentation context@Context {..} = when (stage == Stage1 && package /= rts) $ do
     root <- buildRootRules
 
     -- Js and Css files for haddock output
@@ -157,17 +160,18 @@ buildPackageDocumentation context@Context {..} = when (stage == Stage1) $ do
       liftIO (writeFile file prologue)
 
     root -/- htmlRoot -/- "libraries" -/- pkgName package -/- pkgName package <.> "haddock" %> \file -> do
-        need [ root -/- htmlRoot -/- "libraries" -/- pkgName package -/- "haddock-prologue.txt" ]
-        haddocks <- haddockDependencies context
-        srcs <- hsSources context
-        need $ srcs ++ haddocks ++ [haddockHtmlLib root]
+      need [ root -/- htmlRoot -/- "libraries" -/- pkgName package -/- "haddock-prologue.txt" ]
+      haddocks <- haddockDependencies context
+      srcs <- hsSources context
+      putNormal $ "SOURCES for " ++ pkgName package ++ " = " ++ show srcs
+      need $ srcs ++ haddocks ++ [haddockHtmlLib root]
 
-        -- Build Haddock documentation
-        -- TODO: pass the correct way from Rules via Context
-        dynamicPrograms <- dynamicGhcPrograms <$> flavour
-        let haddockWay = if dynamicPrograms then dynamic else vanilla
-        build $ target (context {way = haddockWay}) (Haddock BuildPackage)
-                       srcs [file]
+      -- Build Haddock documentation
+      -- TODO: pass the correct way from Rules via Context
+      dynamicPrograms <- dynamicGhcPrograms <$> flavour
+      let haddockWay = if dynamicPrograms then dynamic else vanilla
+      build $ target (context {way = haddockWay}) (Haddock BuildPackage)
+                     srcs [file]
 
 ----------------------------------------------------------------------
 -- PDF
