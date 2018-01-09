@@ -31,7 +31,7 @@ documentationRules = do
         let html = htmlRoot -/- "index.html"
             archives = map pathArchive docPaths
             pdfs = map pathPdf $ docPaths \\ [ "libraries" ]
-        need $ map (root -/-) $ [html] -- ++ archives ++ pdfs
+        need $ map (root -/-) $ [html] ++ archives ++ pdfs
         need [ root -/- htmlRoot -/- "libraries" -/- "gen_contents_index" ]
         need [ root -/- htmlRoot -/- "libraries" -/- "prologue.txt" ]
         need [manPagePath]
@@ -184,7 +184,7 @@ buildPdfDocumentation = mapM_ buildSphinxPdf docPaths
 buildSphinxPdf :: FilePath -> Rules ()
 buildSphinxPdf path = do
     root <- buildRootRules
-    root -/- path <.> "pdf" %> \file -> do
+    root -/- pdfRoot -/- path <.> "pdf" %> \file -> do
         let context = vanillaContext Stage0 docPackage
         withTempDir $ \dir -> do
             build $ target context (Sphinx Latex) [pathPath path] [dir]

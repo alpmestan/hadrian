@@ -21,7 +21,8 @@ haddockBuilderArgs = withHsPackage $ \ctx -> mconcat
         root   <- getBuildRoot
         stg    <- Types.Context.stage <$> getContext
         mconcat
-            [ arg $ "-B" ++ root -/- stageString stg -/- "lib"
+            [ arg $ "-B" ++ root -/- "stage1" -/- "lib"
+            , arg $ "--lib=" ++ root -/- "lib"
             , arg "--gen-index"
             , arg "--gen-contents"
             , arg "-o", arg $ takeDirectory output
@@ -44,7 +45,8 @@ haddockBuilderArgs = withHsPackage $ \ctx -> mconcat
         Just hVersion <- expr $ pkgVersion ctx
         ghcOpts  <- haddockGhcArgs
         mconcat
-            [ arg $ "-B" ++ root -/- stageString stg -/- "lib"
+            [ arg $ "-B" ++ root -/- "stage1" -/- "lib"
+            , arg $ "--lib=" ++ root -/- "lib"
             , arg $ "--odir=" ++ takeDirectory output
             , arg "--verbosity=0"
             , arg "--no-tmp-comp-dir"

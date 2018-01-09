@@ -6,6 +6,8 @@
 , boot-ghc ? "ghc821" }:
 
 let
+  ourtexlive = nixpkgs.texlive.combine
+    { inherit (nixpkgs.texlive) scheme-small fncychap; };
   haskellPackages = nixpkgs.haskell.packages.${boot-ghc};
   removeBuild = path: type:
     let baseName = baseNameOf (toString path);
@@ -63,5 +65,6 @@ in
                     nixpkgs.gmp
                     nixpkgs.file
                     nixpkgs.llvm_5
+		    ourtexlive
 		  ];
   })
