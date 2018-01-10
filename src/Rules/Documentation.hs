@@ -163,7 +163,6 @@ buildPackageDocumentation context@Context {..} = when (stage == Stage1 && packag
       need [ root -/- htmlRoot -/- "libraries" -/- pkgName package -/- "haddock-prologue.txt" ]
       haddocks <- haddockDependencies context
       srcs <- hsSources context
-      putNormal $ "SOURCES for " ++ pkgName package ++ " = " ++ show srcs
       need $ srcs ++ haddocks ++ [haddockHtmlLib root]
 
       -- Build Haddock documentation
