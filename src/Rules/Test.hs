@@ -29,6 +29,7 @@ testRules = do
                     [ [ pkgPath pkg -/- "tests", pkgPath pkg -/- "tests-ghc" ]
                     | pkg <- pkgs, isLibrary pkg, pkg /= rts, pkg /= libffi ]
         windows  <- windowsHost
+        let darwin = False -- FIXME
         top      <- topDirectory
         compiler <- builderPath $ Ghc CompileHs Stage2
         ghcPkg   <- builderPath $ GhcPkg Update Stage1
@@ -38,10 +39,14 @@ testRules = do
         ghcWithNativeCodeGenInt <- fromEnum <$> ghcWithNativeCodeGen
         ghcWithInterpreterInt   <- fromEnum <$> ghcWithInterpreter
         ghcUnregisterisedInt    <- fromEnum <$> flag GhcUnregisterised
-        quietly . cmd "python2" $
+        putLoud $ show (compiler, ghcPkg, haddock)
+        quietly . cmd "python3" $
             [ "testsuite/driver/runtests.py" ]
             ++ map ("--rootdir="++) tests ++
             [ "-e", "windows=" ++ show windows
+            , "-e", "darwin=" ++ show darwin
+            , "-e", "config.local=True" -- FIXME? do we ever not want to put test artefacts in tmp? see testsuite/driver/runtests.py, line 237 onwards
+            , "-e", "config.cleanup=False" -- FIXME?
             , "-e", "config.speed=2"
             , "-e", "ghc_compiler_always_flags=" ++ show "-fforce-recomp -dcore-lint -dcmm-lint -dno-debug-output -no-user-package-db -rtsopts"
             , "-e", "ghc_with_native_codegen=" ++ show ghcWithNativeCodeGenInt
@@ -53,12 +58,12 @@ testRules = do
             , "-e", "ghc_unregisterised=" ++ show ghcUnregisterisedInt
             , "-e", "ghc_with_threaded_rts=0" -- TODO: support threaded
             , "-e", "ghc_with_dynamic_rts=0" -- TODO: support dynamic
-            , "-e", "ghc_dynamic_by_default=False" -- TODO: support dynamic
-            , "-e", "ghc_dynamic=0" -- TODO: support dynamic
+            , "-e", "config.ghc_dynamic_by_default=False" -- TODO: support dynamic
+            , "-e", "config.ghc_dynamic=0" -- TODO: support dynamic
             , "-e", "ghc_with_llvm=0" -- TODO: support LLVM
-            , "-e", "in_tree_compiler=True" -- TODO: when is it equal to False?
+            , "-e", "config.in_tree_compiler=True" -- TODO: when is it equal to False?
             , "-e", "clean_only=False" -- TODO: do we need to support True?
-            , "--configfile=testsuite/config/ghc"
+            , "--config-file=testsuite/config/ghc"
             , "--config", "compiler=" ++ show (top -/- compiler)
             , "--config", "ghc_pkg="  ++ show (top -/- ghcPkg)
             , "--config", "haddock="  ++ show (top -/- haddock)
