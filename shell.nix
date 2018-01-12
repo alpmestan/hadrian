@@ -62,7 +62,8 @@ in
                     nixpkgs.python3Packages.sphinx
                     nixpkgs.ncurses
                     nixpkgs.m4
-                    nixpkgs.gmp
+                    nixpkgs.gmp.out
+		    nixpkgs.gmp.dev
                     nixpkgs.file
                     nixpkgs.llvm_5
 		    ourtexlive

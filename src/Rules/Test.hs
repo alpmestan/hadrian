@@ -10,13 +10,66 @@ import Target
 import Utilities
 import GHC.Packages
 
+import Data.Char (isSpace)
+import System.Directory (createDirectoryIfMissing)
+import System.Environment (lookupEnv, setEnv)
+
+lookupOnlyTests :: Action [String]
+lookupOnlyTests = liftIO $ (++)
+  <$> fmap (maybe [] words) (lookupEnv "TESTS")
+  <*> fmap (maybe [] words) (lookupEnv "TEST")
+
+-- FIXME: add ".exe" extension on windows
+timeoutProgPath :: FilePath
+timeoutProgPath = "test" -/- "bin" -/- "timeout"
+
+timeoutPyPath :: FilePath
+timeoutPyPath = "test" -/- "bin" -/- "timeout.py"
+
+testsuiteConfigPath :: FilePath
+testsuiteConfigPath = "test" -/- "config" -/- "ghc"
+
+generateTestConfigFrom :: FilePath -> FilePath -> IO ()
+generateTestConfigFrom src dest = do
+  cfglines <- lines <$> readFile src
+  let newcfg = unlines $ filter (not . blacklistedLine) cfglines
+  createDirectoryIfMissing True (takeDirectory dest)
+  writeFile dest newcfg
+
+  where blacklistedLine = isConfigFor ["compiler", "haddock", "hp2ps", "hpc"]
+        isConfigFor xs s
+          | "config." `isPrefixOf` s = takeWhile (/='=') (drop 7 $ filter (not . isSpace) s) `elem` xs
+          | otherwise = False
+
 -- TODO: clean up after testing
 testRules :: Rules ()
 testRules = do
+    root <- buildRootRules
+
+    root -/- timeoutPyPath ~> do -- FIXME: run only when not on Windows
+      copyFile "testsuite/timeout/timeout.py" (root -/- timeoutPyPath)
+
+    root -/- timeoutProgPath ~> do
+      need [ root -/- timeoutPyPath ]
+      let script = unlines
+            [ "#!/usr/bin/env sh"
+            , "exec python3 $0.py \"$@\""
+            ]
+      liftIO $ do
+        writeFile (root -/- timeoutProgPath) script
+        cmd "chmod" [ "+x", root -/- timeoutProgPath ]
+
+    root -/- testsuiteConfigPath ~> do
+      putBuild "Generating testsuite config..."
+      liftIO $ generateTestConfigFrom "testsuite/config/ghc"
+                                      (root -/- testsuiteConfigPath)
+
     "validate" ~> do
         needBuilder $ Ghc CompileHs Stage2
         needBuilder $ GhcPkg Update Stage1
         needBuilder Hpc
+        need [ root -/- timeoutProgPath ]
+        need [ root -/- testsuiteConfigPath ]
         -- TODO: Figure out why @needBuilder Hsc2Hs@ doesn't work.
         -- TODO: Eliminate explicit filepaths.
         -- See https://github.com/snowleopard/hadrian/issues/376.
@@ -39,7 +92,9 @@ testRules = do
         ghcWithNativeCodeGenInt <- fromEnum <$> ghcWithNativeCodeGen
         ghcWithInterpreterInt   <- fromEnum <$> ghcWithInterpreter
         ghcUnregisterisedInt    <- fromEnum <$> flag GhcUnregisterised
-        putLoud $ show (compiler, ghcPkg, haddock)
+        onlyTests <- lookupOnlyTests
+        need [ root -/- timeoutProgPath ]
+        need [ root -/- testsuiteConfigPath ]
         quietly . cmd "python3" $
             [ "testsuite/driver/runtests.py" ]
             ++ map ("--rootdir="++) tests ++
@@ -48,7 +103,8 @@ testRules = do
             , "-e", "config.local=True" -- FIXME? do we ever not want to put test artefacts in tmp? see testsuite/driver/runtests.py, line 237 onwards
             , "-e", "config.cleanup=False" -- FIXME?
             , "-e", "config.speed=2"
-            , "-e", "ghc_compiler_always_flags=" ++ show "-fforce-recomp -dcore-lint -dcmm-lint -dno-debug-output -no-user-package-db -rtsopts"
+            ] ++ concat [ ["--only", t] | t <- onlyTests ] ++
+            [ "-e", "ghc_compiler_always_flags=" ++ show "-fforce-recomp -dcore-lint -dcmm-lint -dno-debug-output -no-user-package-db -rtsopts"
             , "-e", "ghc_with_native_codegen=" ++ show ghcWithNativeCodeGenInt
             , "-e", "ghc_debugged=" ++ show (yesNo debugged)
             , "-e", "ghc_with_vanilla=1" -- TODO: do we always build vanilla?
@@ -63,10 +119,12 @@ testRules = do
             , "-e", "ghc_with_llvm=0" -- TODO: support LLVM
             , "-e", "config.in_tree_compiler=True" -- TODO: when is it equal to False?
             , "-e", "clean_only=False" -- TODO: do we need to support True?
-            , "--config-file=testsuite/config/ghc"
-            , "--config", "compiler=" ++ show (top -/- compiler)
-            , "--config", "ghc_pkg="  ++ show (top -/- ghcPkg)
-            , "--config", "haddock="  ++ show (top -/- haddock)
+            , "--config-file=" ++ (root -/- testsuiteConfigPath)
+            , "-e", "config.compiler=" ++ show (top -/- compiler)
+            , "-e", "config.ghc_pkg="  ++ show (top -/- ghcPkg)
+            , "-e", "config.haddock="  ++ show (top -/- haddock)
+            , "-e", "config.timeout_prog=" ++ show (root -/- timeoutProgPath)
+            , "--config", "a=b" -- FIXME
             , "--summary-file", "testsuite_summary.txt"
             , "--threads=" ++ show threads
             ]
