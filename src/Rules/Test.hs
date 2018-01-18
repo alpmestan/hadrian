@@ -95,6 +95,29 @@ testRules = do
         onlyTests <- lookupOnlyTests
         need [ root -/- timeoutProgPath ]
         need [ root -/- testsuiteConfigPath ]
+
+        let ifMinGhcVer v opt = do ver <- ghcCanonVersion
+                                   if v <= v then pure opt
+                                             else pure ""
+
+        -- Prepare extra flags to send to the Haskell compiler.
+        -- TODO: read extra argument for test from command line, like `-fvectorize`.
+        let ghcExtraFlags = if ghcUnregisterisedInt /= 0            -- Value EXTRA_HC_OPTS should be handled.
+                               then "-optc-fno-builtin"
+                               else ""
+
+        -- Take flags to send to the Haskell compiler from test.mk.
+        -- See: https://github.com/ghc/ghc/blob/cf2c029ccdb967441c85ffb66073974fbdb20c20/testsuite/mk/test.mk#L37-L55
+        ghcFlags <- sequence
+            [ pure "-dcore-lint -dcmm-lint -no-user-package-db -rtsopts"
+            , pure ghcExtraFlags
+            , ifMinGhcVer "711" "-fno-warn-missed-specialisations"
+            , ifMinGhcVer "711" "-fshow-warning-groups"
+            , ifMinGhcVer "801" "-fdiagnostics-color=never"
+            , ifMinGhcVer "801" "-fno-diagnostics-show-caret"
+            , pure "-dno-debug-output"
+            ]
+
         quietly . cmd "python3" $
             [ "testsuite/driver/runtests.py" ]
             ++ map ("--rootdir="++) tests ++
@@ -104,7 +127,7 @@ testRules = do
             , "-e", "config.cleanup=False" -- FIXME?
             , "-e", "config.speed=2"
             ] ++ concat [ ["--only", t] | t <- onlyTests ] ++
-            [ "-e", "ghc_compiler_always_flags=" ++ show "-fforce-recomp -dcore-lint -dcmm-lint -dno-debug-output -no-user-package-db -rtsopts"
+            [ "-e", "ghc_compiler_always_flags=" ++ quote (unwords ghcFlags)
             , "-e", "ghc_with_native_codegen=" ++ show ghcWithNativeCodeGenInt
             , "-e", "ghc_debugged=" ++ show (yesNo debugged)
             , "-e", "ghc_with_vanilla=1" -- TODO: do we always build vanilla?
@@ -120,10 +143,11 @@ testRules = do
             , "-e", "config.in_tree_compiler=True" -- TODO: when is it equal to False?
             , "-e", "clean_only=False" -- TODO: do we need to support True?
             , "--config-file=" ++ (root -/- testsuiteConfigPath)
-            , "-e", "config.compiler=" ++ show (top -/- compiler)
-            , "-e", "config.ghc_pkg="  ++ show (top -/- ghcPkg)
-            , "-e", "config.haddock="  ++ show (top -/- haddock)
-            , "-e", "config.timeout_prog=" ++ show (root -/- timeoutProgPath)
+            , "--config", "compiler="     ++ show (top -/- compiler)
+            , "--config", "ghc_pkg="      ++ show (top -/- ghcPkg)
+            , "--config", "haddock="      ++ show (top -/- haddock)
+            , "--config", "timeout_prog=" ++ show (top -/- timeoutProgPath)
+
             , "--config", "a=b" -- FIXME
             , "--summary-file", "testsuite_summary.txt"
             , "--threads=" ++ show threads
