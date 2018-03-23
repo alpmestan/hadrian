@@ -8,15 +8,16 @@ import qualified Hadrian.Oracles.TextFile
 import Expression
 import GHC
 import qualified Oracles.ModuleFiles
+import qualified Rules.Bindist
 import qualified Rules.Compile
-import qualified Rules.PackageData
+import qualified Rules.Configure
 import qualified Rules.Dependencies
 import qualified Rules.Documentation
 import qualified Rules.Generate
-import qualified Rules.Configure
 import qualified Rules.Gmp
 import qualified Rules.Libffi
 import qualified Rules.Library
+import qualified Rules.PackageData
 import qualified Rules.Program
 import qualified Rules.Register
 import Settings
@@ -30,7 +31,9 @@ allStages = [minBound .. maxBound]
 -- 'Stage1Only' flag.
 topLevelTargets :: Rules ()
 topLevelTargets = do
-    phony "stage2" $ do
+  Rules.Bindist.bindistRules
+
+  phony "stage2" $ do
       putNormal "Building stage2"
       (programs, libraries) <- partition isProgram <$> stagePackages Stage1
       pgmNames <- mapM (g Stage1) programs
