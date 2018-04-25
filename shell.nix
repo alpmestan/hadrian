@@ -2,7 +2,9 @@
 # by only invoking hadrian.
 
 
-{ _nixpkgs ? import <nixpkgs> {} }:
+{ _nixpkgs ? import <nixpkgs> {}
+, bootghc ? "ghc822"
+}:
 
 let
 
@@ -22,7 +24,7 @@ let
     };
   };
 
-  haskellPackages = nixpkgs.haskell.packages.ghc822;
+  haskellPackages = nixpkgs.haskell.packages.${bootghc};
 
   removeBuild = path: type:
     let baseName = baseNameOf (toString path);
@@ -38,28 +40,28 @@ let
            || !(nixpkgs.lib.cleanSourceFilter path type)) ;
 
   filterSrc = path: builtins.filterSource removeBuild path;
+  dontTest = nixpkgs.haskell.lib.dontCheck;
 
-
-  hadrianPackages = nixpkgs.haskell.packages.ghc822.override {
+  hadrianPackages = nixpkgs.haskell.packages.${bootghc}.override {
     overrides = self: super: let
         localPackage = name: path: self.callCabal2nix name (filterSrc path) {};
       in {
         hadrian = localPackage "hadrian" ./. ;
-        happy = nixpkgs.haskell.lib.dontCheck (super.happy);
-        shake = self.callHackage "shake" "0.16.2" {};
-        extra = self.callHackage "extra" "1.6.4" {};
-        QuickCheck = self.callHackage "QuickCheck" "2.10" {};
-        Cabal = localPackage "Cabal" ./../libraries/Cabal/Cabal ;
-        filepath = localPackage "filepath" ./../libraries/filepath ;
-        text = localPackage "text" ./../libraries/text  ;
-        hpc = localPackage"hpc" ./../libraries/hpc ;
-        parsec = localPackage "parsec" ./../libraries/parsec ;
-        HUnit = nixpkgs.haskell.lib.dontCheck (self.callHackage "HUnit" "1.3.1.2" {});
-        process = localPackage "process" ./../libraries/process ;
-        directory = localPackage "directory" ./../libraries/directory ;
+        happy = dontTest (super.happy);
+        shake = dontTest (self.callHackage "shake" "0.16.2" {});
+        extra = dontTest (self.callHackage "extra" "1.6.4" {});
+        QuickCheck = dontTest (self.callHackage "QuickCheck" "2.10" {});
+        Cabal = dontTest (localPackage "Cabal" ./../libraries/Cabal/Cabal) ;
+        filepath = dontTest (localPackage "filepath" ./../libraries/filepath) ;
+        text = dontTest (localPackage "text" ./../libraries/text)  ;
+        hpc = dontTest (localPackage"hpc" ./../libraries/hpc) ;
+        parsec = dontTest (localPackage "parsec" ./../libraries/parsec) ;
+        HUnit = dontTest (self.callHackage "HUnit" "1.3.1.2" {});
+        process = dontTest (localPackage "process" ./../libraries/process) ;
+        directory = dontTest (localPackage "directory" ./../libraries/directory) ;
       }; };
 
-  cabalPackages = nixpkgs.haskell.packages.ghc822.override {
+  cabalPackages = nixpkgs.haskell.packages.${bootghc}.override {
     overrides = self: super: let
         localPackage = name: path: self.callCabal2nix name (filterSrc path) {};
       in {
@@ -78,10 +80,9 @@ in
           nixpkgs.git
           nixpkgs.python3Packages.sphinx
           nixpkgs.texlive.combined.scheme-basic
-          (nixpkgs.haskell.packages.ghc822.ghcWithPackages
+          (haskellPackages.ghcWithPackages
             (ps: [ps.html ps.regex-compat ps.dump-core]))
 
           #cabalPackages.cabal-install
         ];
     })
-
